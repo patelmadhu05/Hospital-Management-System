@@ -1,15 +1,45 @@
+// JavaFX Core Graphics & Application Imports
 import javafx.application.Application;
+import javafx.stage.Stage;
+import javafx.scene.Scene;
+import javafx.scene.Node;
+
+// JavaFX Layout Panes
+import javafx.scene.layout.VBox;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.StackPane;
+import javafx.geometry.Pos;
+import javafx.geometry.Insets;
+
+// JavaFX UI Controls
+import javafx.scene.control.Label;
+import javafx.scene.control.Button;
+import javafx.scene.control.TextField;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Separator;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.cell.PropertyValueFactory;
+
+// JavaFX Collections & Filtering
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Scene;
-import javafx.scene.control.*;
-import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.layout.*;
-import javafx.stage.Stage;
 
+// Java Network, Database & Utility Imports
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -42,7 +72,7 @@ public class Main1 extends Application {
         private final String gender;
         private final String disease;
         private final String contact;
-        private final String roomNumber; // NEW Field reference
+        private final String roomNumber;
 
         public Patient(String name, int age, String gender, String disease, String contact, String roomNumber) {
             this.name = name;
@@ -96,7 +126,7 @@ public class Main1 extends Application {
         public String getAppointmentDate() { return appointmentDate; }
     }
 
-    // ================= DATABASE CONCURRENCY OPERATIONS =================
+    // ================= DATABASE / API OPERATIONS =================
     private void loadPatientsFromDB() {
         patientList.clear();
         patientNamesList.clear();
@@ -108,7 +138,6 @@ public class Main1 extends Application {
 
             while (rs.next()) {
                 String name = rs.getString("name");
-                // Check if our room tracking column is supported or fallback
                 String room = "Not Assigned";
                 try { room = rs.getString("room_number"); } catch (Exception ignored) {}
                 if(room == null || room.isEmpty()) room = "General Ward";
@@ -124,18 +153,61 @@ public class Main1 extends Application {
         doctorList.clear();
         doctorNamesList.clear();
         try {
-            Connection conn = DBConnection.getConnection();
-            String sql = "SELECT * FROM doctors";
-            PreparedStatement stmt = conn.prepareStatement(sql);
-            ResultSet rs = stmt.executeQuery();
+            URL url = new URL("http://localhost:8080/api/doctors");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "application/json");
 
-            while (rs.next()) {
-                String name = rs.getString("name");
-                doctorList.add(new Doctor(name, rs.getString("specialization"), rs.getString("contact"), rs.getString("availability")));
-                doctorNamesList.add(name);
+            if (conn.getResponseCode() == 200) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) {
+                    response.append(line);
+                }
+                br.close();
+
+                String json = response.toString().trim();
+                if (json.startsWith("[") && json.endsWith("]")) {
+                    json = json.substring(1, json.length() - 1).trim();
+                    if (!json.isEmpty()) {
+                        String[] objects = json.split("\\},\\{");
+                        for (String obj : objects) {
+                            obj = obj.replace("{", "").replace("}", "");
+                            String name = parseJsonValue(obj, "name");
+                            String spec = parseJsonValue(obj, "specialization");
+                            String contact = parseJsonValue(obj, "contact");
+                            String avail = parseJsonValue(obj, "availability");
+
+                            if (name != null) {
+                                doctorList.add(new Doctor(name, spec, contact, avail));
+                                doctorNamesList.add(name);
+                            }
+                        }
+                    }
+                }
             }
-            conn.close();
-        } catch (Exception e) { System.out.println("Doctor fetch fail: " + e.getMessage()); }
+            conn.disconnect();
+        } catch (Exception e) { 
+            System.out.println("Doctor API fetch fail: " + e.getMessage()); 
+        }
+    }
+
+    private String parseJsonValue(String jsonBlock, String key) {
+        String matchToken = "\"" + key + "\":";
+        int index = jsonBlock.indexOf(matchToken);
+        if (index == -1) return "";
+        int start = index + matchToken.length();
+        
+        if (jsonBlock.charAt(start) == '"') {
+            start++;
+            int end = jsonBlock.indexOf("\"", start);
+            return jsonBlock.substring(start, end);
+        } else {
+            int end = jsonBlock.indexOf(",", start);
+            if (end == -1) end = jsonBlock.length();
+            return jsonBlock.substring(start, end).trim();
+        }
     }
 
     private void loadAppointmentsFromDB() {
@@ -172,7 +244,7 @@ public class Main1 extends Application {
 
     // ===================== PORTAL STAGE 1: SECURE GATEWAY =====================
     private void createLoginScene() {
-        VBox loginBox = new VBox(15);
+        VBox loginBox = new VBox(15.0);
         loginBox.getStyleClass().add("login-box");
         loginBox.setMaxWidth(350); loginBox.setMaxHeight(300); loginBox.setAlignment(Pos.CENTER);
 
@@ -208,7 +280,6 @@ public class Main1 extends Application {
         Label title = new Label("🏥 Hospital Dashboard");
         title.getStyleClass().add("header-label");
 
-        // --- NEW REALTIME MASTER GLOBAL SEARCH BAR ---
         TextField searchBar = new TextField();
         searchBar.setPromptText("🔍 Global Directory Live Filter...");
         searchBar.setPrefWidth(280);
@@ -217,7 +288,7 @@ public class Main1 extends Application {
         Region spacer1 = new Region(); HBox.setHgrow(spacer1, Priority.ALWAYS);
         Region spacer2 = new Region(); HBox.setHgrow(spacer2, Priority.ALWAYS);
         
-        HBox topBar = new HBox(15, title, spacer1, searchBar, spacer2, logoutBtn);
+        HBox topBar = new HBox(15.0, title, spacer1, searchBar, spacer2, logoutBtn);
         topBar.setPadding(new Insets(15)); topBar.setStyle("-fx-background-color: white;"); topBar.setAlignment(Pos.CENTER_LEFT);
 
         TabPane mainTabPane = new TabPane();
@@ -234,7 +305,6 @@ public class Main1 extends Application {
         TextField pDiseaseField = new TextField(); pDiseaseField.setPromptText("Disease");
         TextField pContactField = new TextField(); pContactField.setPromptText("Contact");
         
-        // NEW Room Selection Dropdown
         ComboBox<String> pRoomBox = new ComboBox<>(FXCollections.observableArrayList("General Ward A", "General Ward B", "ICU Room 1", "ICU Room 2", "Private Suite 101"));
         pRoomBox.setPromptText("Assign Bed/Room"); pRoomBox.setMaxWidth(Double.MAX_VALUE);
         
@@ -244,9 +314,14 @@ public class Main1 extends Application {
         Button pRemoveBtn = new Button("Remove Patient"); pRemoveBtn.setMaxWidth(Double.MAX_VALUE);
         Button pRefreshBtn = new Button("Refresh Data"); pRefreshBtn.setMaxWidth(Double.MAX_VALUE);
 
-        VBox pSideBar = new VBox(10, 
-            new Label("Admit New Patient") {{ getStyleClass().add("section-header"); }}, pNameField, pAgeField, pGenderBox, pDiseaseField, pContactField, pRoomBox, pAdmitBtn,
-            new Separator(), new Label("Manage Patient") {{ getStyleClass().add("section-header"); }}, pRemoveNameField, pRemoveBtn, pRefreshBtn
+        Label pSectionHeader1 = new Label("Admit New Patient");
+        pSectionHeader1.getStyleClass().add("section-header");
+        Label pSectionHeader2 = new Label("Manage Patient");
+        pSectionHeader2.getStyleClass().add("section-header");
+
+        VBox pSideBar = new VBox(10.0, 
+            pSectionHeader1, pNameField, pAgeField, pGenderBox, pDiseaseField, pContactField, pRoomBox, pAdmitBtn,
+            new Separator(), pSectionHeader2, pRemoveNameField, pRemoveBtn, pRefreshBtn
         );
         pSideBar.setPadding(new Insets(15)); pSideBar.setPrefWidth(240); pSideBar.setStyle("-fx-background-color: white;");
 
@@ -260,10 +335,14 @@ public class Main1 extends Application {
         
         patientTable.getColumns().addAll(colPName, colPAge, colPGender, colPDisease, colPContact, colPRoom);
         
-        // Set up search wrapping filter
         filteredPatientList = new FilteredList<>(patientList, p -> true);
         patientTable.setItems(filteredPatientList);
-        patientPane.setLeft(pSideBar); patientPane.setCenter(new VBox(10, patientTable) {{ setPadding(new Insets(15)); VBox.setVgrow(patientTable, Priority.ALWAYS); }});
+        
+        VBox patientTableContainer = new VBox(10.0, patientTable);
+        patientTableContainer.setPadding(new Insets(15));
+        VBox.setVgrow(patientTable, Priority.ALWAYS);
+        
+        patientPane.setLeft(pSideBar); patientPane.setCenter(patientTableContainer);
         patientTab.setContent(patientPane);
 
         // ------------------------- TAB 2: DOCTORS DIRECTORY -------------------------
@@ -281,9 +360,14 @@ public class Main1 extends Application {
         Button dRemoveBtn = new Button("Remove Doctor"); dRemoveBtn.setMaxWidth(Double.MAX_VALUE);
         Button dRefreshBtn = new Button("Refresh Data"); dRefreshBtn.setMaxWidth(Double.MAX_VALUE);
 
-        VBox dSideBar = new VBox(10, 
-            new Label("Register New Doctor") {{ getStyleClass().add("section-header"); }}, dNameField, dSpecField, dContactField, dAvailBox, dAddBtn,
-            new Separator(), new Label("Manage Staff") {{ getStyleClass().add("section-header"); }}, dRemoveNameField, dRemoveBtn, dRefreshBtn
+        Label dSectionHeader1 = new Label("Register New Doctor");
+        dSectionHeader1.getStyleClass().add("section-header");
+        Label dSectionHeader2 = new Label("Manage Staff");
+        dSectionHeader2.getStyleClass().add("section-header");
+
+        VBox dSideBar = new VBox(10.0, 
+            dSectionHeader1, dNameField, dSpecField, dContactField, dAvailBox, dAddBtn,
+            new Separator(), dSectionHeader2, dRemoveNameField, dRemoveBtn, dRefreshBtn
         );
         dSideBar.setPadding(new Insets(15)); dSideBar.setPrefWidth(240); dSideBar.setStyle("-fx-background-color: white;");
 
@@ -296,7 +380,12 @@ public class Main1 extends Application {
         
         filteredDoctorList = new FilteredList<>(doctorList, d -> true);
         doctorTable.setItems(filteredDoctorList);
-        docPane.setLeft(dSideBar); docPane.setCenter(new VBox(10, doctorTable) {{ setPadding(new Insets(15)); VBox.setVgrow(doctorTable, Priority.ALWAYS); }});
+        
+        VBox docTableContainer = new VBox(10.0, doctorTable);
+        docTableContainer.setPadding(new Insets(15));
+        VBox.setVgrow(doctorTable, Priority.ALWAYS);
+        
+        docPane.setLeft(dSideBar); docPane.setCenter(docTableContainer);
         docTab.setContent(docPane);
 
         // ------------------------- TAB 3: BOOK APPOINTMENTS -------------------------
@@ -316,9 +405,14 @@ public class Main1 extends Application {
         Button cancelAppBtn = new Button("Cancel Appointment"); cancelAppBtn.setMaxWidth(Double.MAX_VALUE);
         Button appRefreshBtn = new Button("Refresh Data"); appRefreshBtn.setMaxWidth(Double.MAX_VALUE);
 
-        VBox appSideBar = new VBox(10,
-            new Label("New Appointment") {{ getStyleClass().add("section-header"); }}, appPatientBox, appDoctorBox, appDateField, bookAppBtn,
-            new Separator(), new Label("Cancel Session") {{ getStyleClass().add("section-header"); }}, appRemoveField, cancelAppBtn, appRefreshBtn
+        Label appSectionHeader1 = new Label("New Appointment");
+        appSectionHeader1.getStyleClass().add("section-header");
+        Label appSectionHeader2 = new Label("Cancel Session");
+        appSectionHeader2.getStyleClass().add("section-header");
+
+        VBox appSideBar = new VBox(10.0,
+            appSectionHeader1, appPatientBox, appDoctorBox, appDateField, bookAppBtn,
+            new Separator(), appSectionHeader2, appRemoveField, cancelAppBtn, appRefreshBtn
         );
         appSideBar.setPadding(new Insets(15)); appSideBar.setPrefWidth(240); appSideBar.setStyle("-fx-background-color: white;");
 
@@ -328,7 +422,12 @@ public class Main1 extends Application {
         TableColumn<Appointment, String> colAppDate = new TableColumn<>("Appointment Date / Time"); colAppDate.setCellValueFactory(new PropertyValueFactory<>("appointmentDate")); colAppDate.setPrefWidth(220);
         appointmentTable.getColumns().addAll(colAppPat, colAppDoc, colAppDate);
         appointmentTable.setItems(appointmentList);
-        appPane.setLeft(appSideBar); appPane.setCenter(new VBox(10, appointmentTable) {{ setPadding(new Insets(15)); VBox.setVgrow(appointmentTable, Priority.ALWAYS); }});
+        
+        VBox appTableContainer = new VBox(10.0, appointmentTable);
+        appTableContainer.setPadding(new Insets(15));
+        VBox.setVgrow(appointmentTable, Priority.ALWAYS);
+        
+        appPane.setLeft(appSideBar); appPane.setCenter(appTableContainer);
         appointmentTab.setContent(appPane);
 
         mainTabPane.getTabs().addAll(patientTab, docTab, appointmentTab);
@@ -337,7 +436,6 @@ public class Main1 extends Application {
         searchBar.textProperty().addListener((observable, oldValue, newValue) -> {
             String filter = newValue.toLowerCase();
             
-            // Apply filtering conditions to patients list
             filteredPatientList.setPredicate(patient -> {
                 if (newValue.isEmpty()) return true;
                 return patient.getName().toLowerCase().contains(filter) || 
@@ -345,7 +443,6 @@ public class Main1 extends Application {
                        patient.getRoomNumber().toLowerCase().contains(filter);
             });
 
-            // Apply filtering conditions to doctors list
             filteredDoctorList.setPredicate(doctor -> {
                 if (newValue.isEmpty()) return true;
                 return doctor.getName().toLowerCase().contains(filter) || 
@@ -389,44 +486,56 @@ public class Main1 extends Application {
         dAddBtn.setOnAction(e -> {
             if (dNameField.getText().isEmpty() || dSpecField.getText().isEmpty() || dAvailBox.getValue() == null) return;
             try {
-                Connection conn = DBConnection.getConnection();
-                String sql = "INSERT INTO doctors (name, specialization, contact, availability) VALUES (?, ?, ?, ?)";
-                PreparedStatement stmt = conn.prepareStatement(sql);
-                stmt.setString(1, dNameField.getText());
-                stmt.setString(2, dSpecField.getText());
-                stmt.setString(3, dContactField.getText());
-                stmt.setString(4, dAvailBox.getValue());
-                stmt.executeUpdate(); conn.close();
-                dNameField.clear(); dSpecField.clear(); dContactField.clear(); dAvailBox.setValue(null);
-                refreshAllData();
-            } catch (Exception ex) { System.out.println(ex.getMessage()); }
+                URL url = new URL("http://localhost:8080/api/doctors");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
+
+                String jsonPayload = String.format(
+                    "{\"name\":\"%s\",\"specialization\":\"%s\",\"contact\":\"%s\",\"availability\":\"%s\"}",
+                    dNameField.getText(), dSpecField.getText(), dContactField.getText(), dAvailBox.getValue()
+                );
+
+                try (OutputStream os = conn.getOutputStream()) {
+                    byte[] input = jsonPayload.getBytes(StandardCharsets.UTF_8);
+                    os.write(input, 0, input.length);
+                }
+
+                if (conn.getResponseCode() == 200 || conn.getResponseCode() == 201) {
+                    dNameField.clear(); dSpecField.clear(); dContactField.clear(); dAvailBox.setValue(null);
+                    refreshAllData();
+                }
+                conn.disconnect();
+            } catch (Exception ex) { 
+                System.out.println("Doctor API save fail: " + ex.getMessage()); 
+            }
         });
 
         dRemoveBtn.setOnAction(e -> {
+            String targetName = dRemoveNameField.getText().trim();
+            if (targetName.isEmpty()) return;
+            
             try {
-                Connection conn = DBConnection.getConnection();
-                String sql = "DELETE FROM doctors WHERE name = ?";
-                PreparedStatement stmt = conn.prepareStatement(sql);
-                stmt.setString(1, dRemoveNameField.getText());
-                stmt.executeUpdate(); conn.close();
-                dRemoveNameField.clear(); refreshAllData();
-            } catch (Exception ex) { System.out.println(ex.getMessage()); }
-        });
-        dRefreshBtn.setOnAction(e -> refreshAllData());
+                String encodedName = java.net.URLEncoder.encode(targetName, StandardCharsets.UTF_8.toString()).replace("+", "%20");
+                URL url = new URL("http://localhost:8080/api/doctors/name/" + encodedName);
+                
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("DELETE");
+                conn.setRequestProperty("Accept", "application/json");
 
-        bookAppBtn.setOnAction(e -> {
-            if (appPatientBox.getValue() == null || appDoctorBox.getValue() == null || appDateField.getText().isEmpty()) return;
-            try {
-                Connection conn = DBConnection.getConnection();
-                String sql = "INSERT INTO appointments (patient_name, doctor_name, appointment_date) VALUES (?, ?, ?)";
-                PreparedStatement stmt = conn.prepareStatement(sql);
-                stmt.setString(1, appPatientBox.getValue());
-                stmt.setString(2, appDoctorBox.getValue());
-                stmt.setString(3, appDateField.getText());
-                stmt.executeUpdate(); conn.close();
-                appPatientBox.setValue(null); appDoctorBox.setValue(null); appDateField.clear();
-                refreshAllData();
-            } catch (Exception ex) { System.out.println(ex.getMessage()); }
+                int responseCode = conn.getResponseCode();
+                if (responseCode == 200) {
+                    System.out.println("Successfully deleted doctor: " + targetName);
+                    dRemoveNameField.clear();
+                    refreshAllData(); 
+                } else {
+                    System.out.println("Backend rejection. Response Code: " + responseCode);
+                }
+                conn.disconnect();
+            } catch (Exception ex) {
+                System.out.println("Doctor API deletion failure: " + ex.getMessage());
+            }
         });
 
         cancelAppBtn.setOnAction(e -> {

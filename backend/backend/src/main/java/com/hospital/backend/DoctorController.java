@@ -3,6 +3,8 @@ package com.hospital.backend;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,5 +35,16 @@ public class DoctorController {
     @DeleteMapping("/{id}")
     public void deleteDoctor(@PathVariable Long id) {
         doctorRepository.deleteById(id);
+    }
+
+    @Transactional
+    @DeleteMapping("/name/{name}")
+    public ResponseEntity<String> deleteDoctorByName(@PathVariable String name) {
+        try {
+            doctorRepository.deleteByName(name);
+            return ResponseEntity.ok("Doctor deleted successfully");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error deleting doctor: " + e.getMessage());
+        }
     }
 }
