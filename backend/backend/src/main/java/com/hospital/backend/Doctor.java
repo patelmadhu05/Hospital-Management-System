@@ -7,22 +7,21 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "doctors") // Maps this class to the 'doctors' table in MySQL
+@Table(name = "doctors")
 public class Doctor {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // Handles auto-incrementing IDs
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String name;
     private String specialization;
-    private String contact;       // Added to track contact details
-    private String availability;  // Added to track availability shifts
+    private String contact;
+    private String availability;
 
-    // Default Constructor (Required by JPA)
+    // Constructors
     public Doctor() {}
 
-    // Constructor with fields
     public Doctor(String name, String specialization, String contact, String availability) {
         this.name = name;
         this.specialization = specialization;

@@ -5,6 +5,6 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface DoctorRepository extends JpaRepository<Doctor, Long> {
-    // JpaRepository gives us findall(), save(), deleteById() automatically!
+    // Custom deletion abstraction used dynamically by the frontend UI controller layer
     void deleteByName(String name);
 }
