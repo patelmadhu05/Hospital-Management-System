@@ -150,7 +150,7 @@ public class Main1 extends Application {
     private void loadDoctorsFromDB() {
         doctorList.clear(); doctorNamesList.clear();
         try {
-            URL url = new URL("http://localhost:8080/api/doctors");
+            URL url = new URL("https://hospital-backend-40gg.onrender.com/api/doctors");
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             conn.setRequestProperty("Accept", "application/json");
@@ -782,7 +782,7 @@ public class Main1 extends Application {
         dAddBtn.setOnAction(e -> {
             if (dNameField.getText().isEmpty() || dSpecField.getText().isEmpty() || dAvailBox.getValue() == null) return;
             try {
-                URL url = new URL("http://localhost:8080/api/doctors");
+                URL url = new URL("https://hospital-backend-40gg.onrender.com/api/doctors");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/json");
@@ -803,7 +803,7 @@ public class Main1 extends Application {
             if (name.isEmpty()) return;
             try {
                 String enc = java.net.URLEncoder.encode(name, StandardCharsets.UTF_8.toString()).replace("+", "%20");
-                HttpURLConnection conn = (HttpURLConnection) new URL("http://localhost:8080/api/doctors/name/" + enc).openConnection();
+                HttpURLConnection conn = (HttpURLConnection) new URL("https://hospital-backend-40gg.onrender.com/api/doctors/name/" + enc).openConnection();
                 conn.setRequestMethod("DELETE");
                 if (conn.getResponseCode() == 200) { dRemoveNameField.clear(); refreshAllData(); }
                 conn.disconnect();
