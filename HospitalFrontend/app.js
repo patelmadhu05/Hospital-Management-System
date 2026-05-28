@@ -1,5 +1,5 @@
 // Base operational network configurations targeting your active Render Engine URL
-const NET_API_BASE = "https://hospital-backend-40gg.onrender.com/api";
+const NET_API_BASE = "https://hospital-backend-engine.onrender.com/api/v1";
 const WARD_BED_RESOURCES = ["General Ward A", "General Ward B", "ICU Room 1", "ICU Room 2", "Private Room 101"];
 
 let memoryPatientsCache = [];
